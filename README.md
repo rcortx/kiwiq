@@ -362,3 +362,101 @@ This project is provided for educational and research purposes only. Scraping we
 ## License
 
 Apache 2.0 — see the [LICENSE](LICENSE) file for details.
+
+## FAQ
+
+### General Questions
+
+**What is KiwiQ?**
+KiwiQ is a production-grade multi-agent orchestration platform that uses JSON-defined agents, multi-tier memory, and built-in observability. It is designed for enterprise AI agents and supports complex multi-step workflows.
+
+**What are the main features?**
+- SDK-first workflow engine with Python/JSON graph schemas
+- Multi-provider LLM support (OpenAI, Anthropic, Google Gemini, etc.)
+- Human-in-the-Loop (HITL) capabilities
+- 24+ reusable node types
+- 27+ production workflow definitions
+- Multi-tier memory and state management
+- RAG pipelines
+- Event-driven architecture
+- Observability and monitoring
+
+### Quick Start
+
+**How do I get started?**
+1. Clone the repository
+2. Set up your environment variables
+3. Run the Docker Compose setup
+4. Access the web interface at http://localhost:8000
+
+**What are the system requirements?**
+- Python 3.12+
+- Docker and Docker Compose
+- PostgreSQL, MongoDB, Redis, Weaviate, RabbitMQ (included in Docker Compose)
+
+### Node Types
+
+**What node types are available?**
+KiwiQ provides 24+ node types including:
+- LLM nodes for AI-powered processing
+- Routing nodes for conditional branching
+- Data transform nodes
+- Web scraping nodes
+- Code execution nodes
+- Sub-workflow nodes
+- And more
+
+**How do I create custom nodes?**
+You can create custom nodes by extending the base node class and implementing the required methods. See the documentation for details.
+
+### LLM Providers
+
+**Which LLM providers are supported?**
+- OpenAI
+- Anthropic
+- Google Gemini
+- Perplexity
+- Fireworks
+- AWS Bedrock
+
+**How do I configure a new LLM provider?**
+Add your API keys to the environment variables and configure the provider in the workflow definition. See the LLM Providers section in the README for details.
+
+### Database Setup
+
+**What databases are required?**
+- PostgreSQL for relational state
+- MongoDB for versioned documents
+- Weaviate for vector search
+- Redis for caching
+
+**How do I set up the databases?**
+Use the provided Docker Compose file which includes all required databases. Alternatively, you can configure each database separately.
+
+### Docker Environments
+
+**How do I run KiwiQ with Docker?**
+1. Clone the repository
+2. Copy `.env.example` to `.env` and configure your environment variables
+3. Run `docker-compose up -d`
+4. Access the web interface at http://localhost:8000
+
+**Can I run without Docker?**
+Yes, see the "Running Without Docker" section in the README for instructions.
+
+### Troubleshooting
+
+**I am getting connection errors. What should I do?**
+1. Check that all Docker containers are running: `docker-compose ps`
+2. Verify your environment variables are set correctly
+3. Check the logs: `docker-compose logs`
+
+**How do I debug workflow issues?**
+1. Check the Prefect dashboard for workflow execution details
+2. Enable debug logging in your environment variables
+3. Review the workflow definition for any syntax errors
+
+**Where can I get help?**
+- Check the documentation
+- Open an issue on GitHub
+- Join the community discussions
