@@ -93,6 +93,7 @@ class WorkflowGraphValidationResult(BaseModel):
     graph_schema_valid: bool = Field(..., description="Whether the graph schema structure is valid")
     node_configs_valid: bool = Field(..., description="Whether all node configurations are valid")
     errors: Dict[str, Any] = Field(default_factory=dict, description="Validation errors by category/node")
+    validation_errors: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Structured validation issues by category/node: each issue includes field, node_id, node_name, expected, actual, actual_type, suggested_fix, documentation_url, and message")
 
 
 # --- WorkflowRun Schemas --- #
