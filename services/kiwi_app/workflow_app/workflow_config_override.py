@@ -19,6 +19,11 @@ from workflow_service.registry.registry import DBRegistry
 from workflow_service.graph.builder import GraphBuilder
 from workflow_service.config.constants import INPUT_NODE_NAME, OUTPUT_NODE_NAME
 from kiwi_app.utils import get_kiwi_logger # Added
+from kiwi_app.workflow_app.validation_issues import (
+    pydantic_error_to_issue,
+    jsonschema_error_to_issue,
+    generic_error_to_issue,
+)
 
 workflow_logger = get_kiwi_logger(name="kiwi_app.workflow_config_override") # Added logger
 
@@ -461,7 +466,7 @@ async def _validate_updated_graph_schema(
     is_superuser: bool = False,
     create_override_mode: bool = False,
 
-) -> Tuple[bool, bool, bool, Dict[str, List[str]]]:
+) -> Tuple[bool, bool, bool, Dict[str, List[str]], Dict[str, List[Dict[str, Any]]]]:
     """
     Validates the merged graph configuration dictionary.
     
@@ -479,15 +484,20 @@ async def _validate_updated_graph_schema(
         create_override_mode (bool): If True, the function will operate in create override mode.
             Defaults to False.
     Returns:
-        Tuple[bool, bool, bool, Dict[str, List[str]]]: A tuple containing:
+        Tuple[bool, bool, bool, Dict[str, List[str]], Dict[str, List[Dict[str, Any]]]]:
+            A tuple containing:
             - overall_is_valid (bool): True if all performed validations pass.
             - pydantic_graph_schema_is_valid (bool): True if the graph_config_dict
               conforms to the GraphSchema Pydantic model.
             - detailed_validation_is_valid (bool): True if node configurations and
               GraphBuilder validations passed, or if perform_detailed_validation was False.
-            - all_errors (Dict[str, List[str]]): A dictionary of validation errors.
+            - all_errors (Dict[str, List[str]]): A dictionary of validation errors (strings,
+              preserved for backward compatibility).
+            - validation_errors (Dict[str, List[Dict[str, Any]]]): A parallel dictionary of
+              structured validation issues (additive metadata for issue #8).
     """
     all_errors: Dict[str, List[str]] = defaultdict(list)
+    validation_errors: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     pydantic_graph_schema_is_valid = False
     node_configs_are_valid = True  # Assume true initially, only relevant if perform_detailed_validation is true
     graph_builder_is_valid = True # Assume true initially, only relevant if perform_detailed_validation is true
@@ -505,11 +515,14 @@ async def _validate_updated_graph_schema(
         for err in e.errors():
             err_loc = ".".join(map(str, err['loc'])) if err['loc'] else "graph_schema"
             all_errors[err_loc].append(err['msg'])
+            validation_errors[err_loc].append(
+                pydantic_error_to_issue(err, message_prefix="Pydantic GraphSchema validation error")
+            )
         # It's also good to have the summary from the original logic:
         all_errors["graph_schema"].append(f"Overall Pydantic GraphSchema validation failed: {str(e)}")
         workflow_logger.warning(f"Pydantic GraphSchema validation failed: {str(e)}")
         # Critical failure, cannot proceed with detailed validation if base schema is wrong
-        return False, pydantic_graph_schema_is_valid, True, all_errors
+        return False, pydantic_graph_schema_is_valid, True, all_errors, validation_errors
 
     if perform_detailed_validation and pydantic_graph_schema_is_valid and graph_schema:
         workflow_logger.info("Performing detailed validation: Node configurations and GraphBuilder.")
@@ -539,6 +552,16 @@ async def _validate_updated_graph_schema(
                 # or the initial 'latest'/specified if not found. node_version_display matches this.
                 error_msg = f"Could not find node template for {node_name} v:{node_version_display} error: {str(e)}"
                 all_errors[node_id].append(error_msg)
+                validation_errors[node_id].append(
+                    generic_error_to_issue(
+                        error_msg,
+                        node_id=node_id,
+                        node_name=node_name,
+                        field="node_name",
+                        expected="a registered node template",
+                        suggested_fix=f"Verify '{node_name}' is a valid registered node name/version.",
+                    )
+                )
                 workflow_logger.warning(f"Node config validation error for {node_id}: {error_msg} ({str(e)})")
                 temp_node_configs_valid = False
                 continue 
@@ -553,6 +576,17 @@ async def _validate_updated_graph_schema(
                 else: # Config is provided (e.g. {'key':'val'}), but no schema defined in template
                     temp_node_configs_valid = False
                     all_errors[node_id].append("Node has no config schema defined, but has a config in the graph schema")
+                    validation_errors[node_id].append(
+                        generic_error_to_issue(
+                            "Node has no config schema defined, but has a config in the graph schema",
+                            node_id=node_id,
+                            node_name=node_name,
+                            field="node_config",
+                            expected="no config (node template has no config_schema_cls)",
+                            actual=str(node_obj.node_config),
+                            suggested_fix="Remove the node_config from the graph schema, or use a node that supports configuration.",
+                        )
+                    )
                     workflow_logger.warning(f"Node {node_id} ({node_name}) has no config schema defined, but has a config in the graph schema: {node_obj.node_config}")
                 continue
             # else: # config_schema_class exists
@@ -584,17 +618,26 @@ async def _validate_updated_graph_schema(
                 error_path = ".".join(map(str, e_json.path)) if e_json.path else "config"
                 error_msg = f"JSONSchema validation failed for '{error_path}': {e_json.message}"
                 all_errors[node_id].append(error_msg)
+                validation_errors[node_id].append(
+                    jsonschema_error_to_issue(e_json, node_id=node_id, node_name=node_name)
+                )
                 workflow_logger.warning(f"Node config validation (JSONSchema) error for {node_id} ({node_name}): {error_msg}")
             except PydanticValidationError as e_pydantic:
                 temp_node_configs_valid = False
                 for err in e_pydantic.errors(): # Detailed Pydantic errors
                     err_loc = ".".join(map(str, err['loc'])) if err['loc'] else "config"
                     all_errors[node_id].append(f"Pydantic validation error for '{err_loc}': {err['msg']}")
+                    validation_errors[node_id].append(
+                        pydantic_error_to_issue(err, node_id=node_id, node_name=node_name)
+                    )
                 workflow_logger.warning(f"Node config validation (Pydantic) error for {node_id} ({node_name}): {str(e_pydantic)}")
             except Exception as e_other: 
                 temp_node_configs_valid = False
                 error_msg = f"Unexpected error during node config validation: {str(e_other)}"
                 all_errors[node_id].append(error_msg)
+                validation_errors[node_id].append(
+                    generic_error_to_issue(error_msg, node_id=node_id, node_name=node_name, field="node_config")
+                )
                 workflow_logger.error(f"Unexpected node config validation error for {node_id} ({node_name}): {error_msg}", exc_info=True)
         
         node_configs_are_valid = temp_node_configs_valid # Set the flag based on loop results
@@ -621,6 +664,9 @@ async def _validate_updated_graph_schema(
                 # Original used last node_id for error key, this is corrected to "graph_builder"
                 error_msg = f"Graph construction/validation by GraphBuilder failed: {str(e)}"
                 all_errors["graph_builder"].append(error_msg)
+                validation_errors["graph_builder"].append(
+                    generic_error_to_issue(error_msg, field="graph_builder")
+                )
                 workflow_logger.error(f"GraphBuilder validation failed: {error_msg}", exc_info=True)
                 graph_builder_is_valid = False # Set specific flag
                 # Original set node_configs_valid = False here, which was less clear.
@@ -643,7 +689,7 @@ async def _validate_updated_graph_schema(
         final_error_count = sum(len(el) for el in all_errors.values())
         workflow_logger.warning(f"Overall graph validation failed with {final_error_count} errors. Errors: {dict(all_errors)}")
         
-    return overall_is_valid, pydantic_graph_schema_is_valid, detailed_validation_passed_or_skipped, all_errors
+    return overall_is_valid, pydantic_graph_schema_is_valid, detailed_validation_passed_or_skipped, all_errors, validation_errors
 
 
 async def apply_graph_override(
@@ -774,7 +820,7 @@ async def apply_graph_override(
 
     # 3. Optionally validate the merged schema
     if validate_schema and db_registry:
-        is_valid, pydantic_valid, detailed_valid, errors = await _validate_updated_graph_schema(
+        is_valid, pydantic_valid, detailed_valid, errors, _validation_errors = await _validate_updated_graph_schema(
             updated_graph_dict, 
             db_registry,
             perform_detailed_validation=True, # When applying override, always perform full validation if requested

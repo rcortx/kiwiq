@@ -654,7 +654,7 @@ async def validate_graph(
     """
     workflow_logger.info(f"User {user.id} requested graph validation. Validate nodes and structure: {validate_nodes_and_structure}")
 
-    overall_is_valid, pydantic_schema_is_valid, detailed_validation_is_valid, errors_dict = \
+    overall_is_valid, pydantic_schema_is_valid, detailed_validation_is_valid, errors_dict, validation_errors_dict = \
         await _validate_updated_graph_schema(
             graph_config_dict=graph_config,
             db_registry=db_registry,
@@ -674,7 +674,8 @@ async def validate_graph(
         is_valid=overall_is_valid,
         graph_schema_valid=pydantic_schema_is_valid,
         node_configs_valid=response_node_configs_valid, # This field indicates if node/builder validation passed or was skipped
-        errors=errors_dict
+        errors=errors_dict,
+        validation_errors=validation_errors_dict if validation_errors_dict else {}
     )
     
     if overall_is_valid:
