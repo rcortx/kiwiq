@@ -7,11 +7,21 @@ from typing import Any, Callable, ClassVar, Dict, Generic, Optional, Type, TypeV
 import inspect
 from abc import ABC, abstractmethod
 
-# FIXME: DEBUG: Prefect test!
-from prefect import task
-from prefect.cache_policies import NO_CACHE
-from prefect import runtime
-from prefect.context import get_run_context
+# Prefect integration with graceful fallback
+try:
+    from prefect import task
+    from prefect.cache_policies import NO_CACHE
+    from prefect import runtime
+    from prefect.context import get_run_context
+except ImportError:
+    NO_CACHE = None
+    runtime = None
+    def task(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+    def get_run_context():
+        return None
 
 from langgraph.types import Command, Send, Interrupt
 
@@ -22,6 +32,13 @@ from workflow_service.utils.utils import get_central_state_field_key, is_dynamic
 from kiwi_app.workflow_app.constants import LaunchStatus
 
 from workflow_service.config.constants import GRAPH_STATE_SPECIAL_NODE_NAME, TEMP_STATE_UPDATE_KEY, ROUTER_CHOICE_KEY
+from workflow_service.registry.errors import (
+    NodeValidationError,
+    get_node_doc_url,
+    suggest_similar_fields,
+    wrap_pydantic_validation_error,
+    DEFAULT_WORKFLOW_DOC_URL,
+)
 
 # Define type variables for input, output, and config schemas
 InputSchemaT = TypeVar('InputSchemaT', bound=BaseSchema)
@@ -262,9 +279,17 @@ class BaseNode(BaseModel, Generic[InputSchemaT, OutputSchemaT, ConfigSchemaT], A
         if cls.config_schema_cls is None:
             cls.config_schema_cls = None
         if not cls.node_name:
-            raise TypeError(f"node_name must be set for {cls.__name__}!")
+            raise TypeError(
+                f"node_name must be set for {cls.__name__}! "
+                f"Expected: non-empty string identifier (e.g. node_name: ClassVar[str] = 'my_node'). "
+                f"Documentation: {DEFAULT_WORKFLOW_DOC_URL}"
+            )
         if not cls.node_version:
-            raise TypeError(f"node_version must be set for {cls.__name__}!")
+            raise TypeError(
+                f"node_version must be set for {cls.__name__}! "
+                f"Expected: semantic version string (e.g. node_version: ClassVar[str] = '1.0.0'). "
+                f"Documentation: {DEFAULT_WORKFLOW_DOC_URL}"
+            )
     
     def __init__(self, allow_non_user_editable_fields_in_config: bool = True, **kwargs):
         super().__init__(**kwargs)
@@ -273,7 +298,39 @@ class BaseNode(BaseModel, Generic[InputSchemaT, OutputSchemaT, ConfigSchemaT], A
         if (not allow_non_user_editable_fields_in_config) and (self.__class__.config_schema_cls is not None) and (not inspect.isabstract(self.__class__.config_schema_cls)):
             is_valid, error_field = self.__class__.config_schema_cls.validate_only_user_editable_fields_provided_in_input(kwargs.get("config", {}))
             if not is_valid:
-                raise ValueError(f"Invalid non-editable fields in {self.__class__.node_id} --> {self.__class__.node_name} node config: `{error_field}`!")
+                raise NodeValidationError(
+                    message=f"Non-editable field provided in configuration: `{error_field}`",
+                    node_id=self.node_id,
+                    node_name=self.node_name,
+                    field_name=error_field,
+                    expected="Only user-editable fields defined in the node configuration schema",
+                    actual=f"Field '{error_field}' marked as non-user-editable",
+                    suggested_fix=f"Remove '{error_field}' from the node config or pass it dynamically via state mapping.",
+                    doc_url=get_node_doc_url(self.node_name),
+                    error_type="non_user_editable_field",
+                )
+
+    @classmethod
+    def validate_node_config(cls, config: Dict[str, Any], node_id: Optional[str] = None) -> None:
+        """
+        Validate node configuration data against the node's config schema.
+
+        Raises:
+            NodeValidationError: If validation fails, with descriptive field, expected/actual, and doc info.
+        """
+        if cls.config_schema_cls is None or inspect.isabstract(cls.config_schema_cls):
+            return
+
+        try:
+            cls.config_schema_cls.model_validate(config)
+        except Exception as e:
+            raise wrap_pydantic_validation_error(
+                e,
+                node_id=node_id,
+                node_name=cls.node_name,
+                schema_cls=cls.config_schema_cls,
+                context_desc="node configuration",
+            ) from e
     
     @abstractmethod
     async def process(self, input_data: InputSchemaT, config: Dict[str, Any], *args: Any, **kwargs: Any) -> OutputSchemaT:
@@ -321,13 +378,33 @@ class BaseNode(BaseModel, Generic[InputSchemaT, OutputSchemaT, ConfigSchemaT], A
         configurable = config.get("configurable", {})
         # print("\n\n\n\n#### configurable (in build input state)", configurable, "\n\n\n\n")  # json.dumps(configurable, indent=4))
         if configurable is None:
-            # TODO: raise exceptions in standard ways while maintaining debugability! 
-            raise ValueError("No config provided to node!")
+            raise NodeValidationError(
+                message="No config provided to node",
+                node_id=self.node_id,
+                node_name=self.node_name,
+                field_name="configurable",
+                expected="A non-empty configuration dictionary containing runtime settings and input mappings",
+                actual="None",
+                suggested_fix="Ensure the workflow runtime passes a valid configuration dictionary with 'configurable' settings.",
+                doc_url=get_node_doc_url(self.node_name),
+                error_type="missing_configuration",
+            )
         if self.input_schema_cls is None or (not self.input_schema_cls.model_fields):
             return {}
         input_dict = {}
         if self.input_schema_cls.get_required_fields() and (("inputs" not in configurable) or (self.node_id not in configurable["inputs"])):
-            raise ValueError("No inputs provided in config for building input state!")
+            required = list(self.input_schema_cls.get_required_fields())
+            raise NodeValidationError(
+                message=f"Missing input mappings for node '{self.node_id}'",
+                node_id=self.node_id,
+                node_name=self.node_name,
+                field_name="inputs",
+                expected=f"Configurable inputs dictionary mapping required fields: {required}",
+                actual="Missing from configurable['inputs']",
+                suggested_fix=f"Connect incoming edges to node '{self.node_id}' in the workflow graph to map required fields: {required}.",
+                doc_url=get_node_doc_url(self.node_name),
+                error_type="missing_input_mappings",
+            )
         field_mappings = configurable["inputs"][self.node_id]
         # print("\n\n\n\n#### field_mappings", field_mappings, "\n\n\n\n")
         parents_run_status = {}
@@ -419,9 +496,17 @@ class BaseNode(BaseModel, Generic[InputSchemaT, OutputSchemaT, ConfigSchemaT], A
         if not build_input_schema_obj:
             return input_dict
 
-        input_obj = self.input_schema_cls(**input_dict)
-        # print("\n\n\n\n#### input_dict (in build input state)", input_obj.model_dump_json(indent=4), "\n\n\n\n")
-        return input_obj
+        try:
+            input_obj = self.input_schema_cls(**input_dict)
+            return input_obj
+        except Exception as e:
+            raise wrap_pydantic_validation_error(
+                e,
+                node_id=self.node_id,
+                node_name=self.node_name,
+                schema_cls=self.input_schema_cls,
+                context_desc="node input state",
+            ) from e
 
     def build_output_state_update(self, output_data: OutputSchemaT, config: Dict[str, Any], state_private_output_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """

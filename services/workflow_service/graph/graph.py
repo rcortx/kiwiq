@@ -4,7 +4,8 @@ Edge schema definitions for workflow connections.
 This module contains the schema definitions for edges in the workflow system.
 Edges connect nodes in the workflow graph and define how data flows between them.
 """
-from typing import Any, Dict, List, Optional, Union, Self, Set, Literal
+from typing import Any, Dict, List, Optional, Union, Set, Literal
+from typing_extensions import Self
 from pydantic import Field, BaseModel, model_validator, ConfigDict
 from workflow_service.config.constants import INPUT_NODE_NAME, OUTPUT_NODE_NAME
 from workflow_service.utils.utils import is_central_state_special_node

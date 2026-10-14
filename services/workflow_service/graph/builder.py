@@ -24,6 +24,11 @@ from workflow_service.registry.nodes.core.dynamic_nodes import BaseDynamicNode
 from workflow_service.config.constants import GRAPH_STATE_SPECIAL_NODE_NAME, CONFIG_REDUCER_KEY, NODE_EXECUTION_ORDER_KEY, INPUT_NODE_NAME, OUTPUT_NODE_NAME
 from workflow_service.utils.utils import get_central_state_field_key, get_node_output_state_key, is_central_state_special_node, is_dynamic_schema_node
 from workflow_service.registry.registry import DBRegistry
+from workflow_service.registry.errors import (
+    NodeValidationError,
+    get_node_doc_url,
+    suggest_similar_fields,
+)
 
 
 class GraphEntities(TypedDict):
@@ -314,7 +319,21 @@ class GraphBuilder:
             # Edge from dynamic node to regular node
             node_cls = self.registry.get_node(node_config.node_name, node_config.node_version)
             if not node_cls:
-                raise ValueError(f"Node {node_config.node_name} not found in registry!")
+                available_nodes = list(getattr(self.registry, "_nodes", {}).keys())
+                similar = suggest_similar_fields(node_config.node_name, available_nodes)
+                fix_msg = "Verify the node is registered with DBRegistry and check spelling."
+                if similar:
+                    fix_msg += f" {similar}"
+                raise NodeValidationError(
+                    message=f"Node '{node_config.node_name}' not found in registry",
+                    node_id=node_id,
+                    node_name=node_config.node_name,
+                    expected=f"A registered node type (available: {available_nodes[:5]}...)" if available_nodes else "A registered node type",
+                    actual=node_config.node_name,
+                    suggested_fix=fix_msg,
+                    doc_url=get_node_doc_url(node_config.node_name),
+                    error_type="node_not_found",
+                )
             
             node_schema = node_cls.input_schema_cls if field_src == "input_fields" else node_cls.output_schema_cls
             if node_schema is not None and field_name in node_schema.model_fields:  #  and (not is_dynamic_schema_node(node_schema)):
@@ -774,12 +793,37 @@ class GraphBuilder:
             # Ensure all required fields have mappings
             if required_fields:
                 if node_id not in runtime_config["inputs"]:
-                    raise ValueError(f"Node '{node_id}' has required input fields but no input mappings")
+                    required_list = list(required_fields)
+                    raise NodeValidationError(
+                        message=f"Node '{node_id}' has required input fields but no input mappings",
+                        node_id=node_id,
+                        node_name=node_instance.node_name,
+                        field_name="inputs",
+                        expected=f"Input edge mappings for required fields: {required_list}",
+                        actual="No input mappings found",
+                        suggested_fix=f"Connect incoming edges to node '{node_id}' in the graph schema for required fields: {required_list}.",
+                        doc_url=get_node_doc_url(node_instance.node_name),
+                        error_type="missing_input_mappings",
+                    )
                 
                 fields_with_edges = set(f.split(".")[0] for f in runtime_config["inputs"][node_id])
                 for field in required_fields:
                     if field not in fields_with_edges:
-                        raise ValueError(f"Required input field '{field}' for node '{node_id}' has no mapping")
+                        similar = suggest_similar_fields(field, list(fields_with_edges))
+                        fix_suggestion = f"Add an edge in the graph schema targeting '{node_id}.{field}'."
+                        if similar:
+                            fix_suggestion += f" {similar}"
+                        raise NodeValidationError(
+                            message=f"Required input field '{field}' for node '{node_id}' has no mapping",
+                            node_id=node_id,
+                            node_name=node_instance.node_name,
+                            field_name=field,
+                            expected=f"Mapping for required field '{field}'",
+                            actual="Unmapped (available mapped fields: " + (", ".join(fields_with_edges) if fields_with_edges else "none") + ")",
+                            suggested_fix=fix_suggestion,
+                            doc_url=get_node_doc_url(node_instance.node_name),
+                            error_type="missing_field_mapping",
+                        )
         
         return runtime_config
 

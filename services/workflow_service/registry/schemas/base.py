@@ -124,8 +124,33 @@ _PRIMITIVE_TYPES_EXTENDED: Tuple[type, ...] = tuple(list(_CORE_PRIMITIVE_TYPES) 
 # ]
 # # _PRIMITIVE_TYPES_UNION: type = Union.__getitem__(_PRIMITIVE_TYPES_EXTENDED)
 # _PRIMITIVE_TYPES_UNION_TYPES: Tuple[type, ...] = (_PRIMITIVE_TYPES_UNION, )
-# _PRIMITIVE_TYPES = tuple([_PRIMITIVE_TYPES_UNION_TYPES] + list(_PRIMITIVE_TYPES_EXTENDED))
 _PRIMITIVE_TYPES = _PRIMITIVE_TYPES_EXTENDED
+
+
+def _cache_classmethod(func):
+    """
+    A decorator that caches the output of a classmethod function.
+    The cache is stored in the class's _CACHE dictionary under a key specific to the function.
+    """
+    cache_attr = f'_cache_{func.__name__}'
+
+    def wrapper(cls, *args, **kwargs):
+        if getattr(cls, 'GLOBAL_DISABLE_METHOD_CACHE', False):
+            return func(cls, *args, **kwargs)
+        
+        if cache_attr not in cls._CACHE:
+            cls._CACHE[cache_attr] = {}
+        
+        key = (args, tuple(sorted(list(kwargs.items()))))
+        cache = cls._CACHE[cache_attr]
+        
+        if key not in cache:
+            cache[key] = func(cls, *args, **kwargs)
+        
+        return cache[key]
+        
+    return classmethod(wrapper)
+
 
 class BaseSchema(BaseModel, ABC):
     model_config = ConfigDict(extra='ignore')  # Allow additional arguments during model init!
@@ -488,48 +513,7 @@ class BaseSchema(BaseModel, ABC):
             f"or collection (List, Dict, Optional) of these types."
         )
     
-    @staticmethod
-    def cache_classmethod(func):
-        """
-        A decorator that caches the output of a classmethod function.
-        The cache is stored in the class's _CACHE dictionary under a key specific to the function.
-        Primarily used for caching recursive methods requiring processing nested classes too.
-        
-        Args:
-            func: The classmethod function to cache
-            
-        Returns:
-            The wrapped function that implements caching
-            
-        Notes:
-            - Cache is stored per-class in cls._CACHE[_cache_{func_name}]
-            - Cache key is created from the function args and kwargs
-            - Cache persists until class is reloaded or cache is manually cleared
-            - Only works on classmethods since it requires cls parameter
-            - Not thread-safe since cache access is not synchronized
-        """
-        cache_attr = f'_cache_{func.__name__}'
-
-        def wrapper(cls, *args, **kwargs):
-            if BaseSchema.GLOBAL_DISABLE_METHOD_CACHE:
-                return func(cls, *args, **kwargs)
-            
-            # Check if we have a cached result
-            if cache_attr not in cls._CACHE:
-                # Initialize empty cache dict if not exists
-                cls._CACHE[cache_attr] = {}
-            
-            # Create cache key from args and kwargs
-            key = (args, tuple(sorted(list(kwargs.items()))))
-            cache = cls._CACHE[cache_attr]
-            
-            if key not in cache:
-                # Call function and cache result if not found
-                cache[key] = func(cls, *args, **kwargs)
-            
-            return cache[key]
-            
-        return classmethod(wrapper)
+    cache_classmethod = staticmethod(_cache_classmethod)
 
     @staticmethod
     def _is_field_deprecated(model_field: Any) -> bool:
@@ -720,8 +704,7 @@ class BaseSchema(BaseModel, ABC):
 
         return True, None
 
-    @classmethod
-    @cache_classmethod
+    @_cache_classmethod
     def get_schema_for_db(cls, include_deprecated: bool = True) -> Dict[str, Any]:
         """
         Generate a dictionary representing the complete schema of the model for database storage.
@@ -786,7 +769,8 @@ class BaseSchema(BaseModel, ABC):
 
             field_validation_result = cls._get_field_validation_result(field_name)
             # This is the full annotation without the Optional part i.e. List[int] or Dict[str, BaseSchema] etc
-            field_schema[BaseSchema.TYPE_FIELD_KEY] = field_validation_result.core_type_annotation.__name__ if field_validation_result.core_type_annotation in cls.PRIMITIVE_TYPES else str(field_validation_result.core_type_annotation)
+            annotation = field_validation_result.core_type_annotation
+            field_schema[BaseSchema.TYPE_FIELD_KEY] = getattr(annotation, '__name__', str(annotation)) if annotation in cls.PRIMITIVE_TYPES else str(annotation)
             # The core type class either Primitive | BaseSchema | Enum
             core_type_class = field_validation_result.core_type_class
             field_schema[BaseSchema.NESTED_SCHEMA_KEY] = None

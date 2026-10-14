@@ -37,13 +37,13 @@ def get_prefect_or_regular_python_logger(name: str, log_level: int = global_sett
         logging.Logger: The appropriate logger instance, or None if return_non_prefect_logger is False
                        and not in Prefect context.
     """
-    from prefect.logging import get_run_logger
-    from prefect.exceptions import MissingContextError
     try:
+        from prefect.logging import get_run_logger
+        from prefect.exceptions import MissingContextError
         logger = get_run_logger()
         logger.setLevel(log_level)
         return logger
-    except MissingContextError:
+    except (ImportError, Exception):
         return get_logger(name) if return_non_prefect_logger else None
 
 
