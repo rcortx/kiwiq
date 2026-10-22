@@ -29,6 +29,28 @@ from global_config.settings import global_settings
 # Configure logging
 logger = logging.getLogger(__name__)
 
+INTEGRATION_HEADER = "X-Weaviate-Client-Integration"
+
+
+def with_integration_header(headers: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """
+    Return a copy of ``headers`` that also identifies KiwiQ to Weaviate.
+
+    Weaviate (>= 1.38) reads ``X-Weaviate-Client-Integration: {name}/{version}`` to
+    attribute traffic to the integration that sent it; older servers ignore it. Headers
+    passed at client creation reach both the REST and the gRPC transport. A header the
+    caller already set (any casing) wins, and failing to build the value never breaks
+    the connection.
+    """
+    merged = dict(headers or {})
+    try:
+        if not any(key.lower() == INTEGRATION_HEADER.lower() for key in merged):
+            version = str(global_settings.VERSION or "").strip() or "unknown"
+            merged[INTEGRATION_HEADER] = f"kiwiq/{version}"
+    except Exception:  # telemetry must never break the connection
+        logger.debug("Could not add the Weaviate integration header", exc_info=True)
+    return merged
+
 
 class WeaviateBaseClient:
     """
@@ -110,17 +132,19 @@ class WeaviateBaseClient:
             Exception: If connection fails
         """
         try:
+            headers = with_integration_header(self.additional_headers)
+
             # Create async client for most operations
             if self.api_key and self.url:
                 self.client = weaviate.use_async_with_weaviate_cloud(
                     cluster_url=self.url,
                     auth_credentials=weaviate.auth.Auth.api_key(self.api_key),
-                    headers=self.additional_headers,
+                    headers=headers,
                 )
             else:
                 self.client = weaviate.use_async_with_local(
                     host=self.host,
-                    headers=self.additional_headers,
+                    headers=headers,
                 )
 
             await self.client.connect()
@@ -130,12 +154,12 @@ class WeaviateBaseClient:
                 self.sync_client = weaviate.connect_to_weaviate_cloud(
                     cluster_url=self.url,
                     auth_credentials=weaviate.auth.Auth.api_key(self.api_key),
-                    headers=self.additional_headers,
+                    headers=headers,
                 )
             else:
                 self.sync_client = weaviate.connect_to_local(
                     host=self.host,
-                    headers=self.additional_headers,
+                    headers=headers,
                 )
 
             logger.info("Successfully connected to Weaviate (async and sync clients)")
