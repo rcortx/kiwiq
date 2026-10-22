@@ -8,7 +8,7 @@
 services:
   # Weaviate Vector Database Service
   weaviate:
-    image: semitechnologies/weaviate:latest # Use the latest official Weaviate image
+    image: semitechnologies/weaviate:1.39.13 # Same pinned version as docker-compose.prod.yml
     container_name: weaviate-dev          # Specific container name for dev
     restart: on-failure                   # Restart policy suitable for dev
     ports:
