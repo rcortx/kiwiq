@@ -38,7 +38,7 @@ langgraph-checkpoint-postgres = "2.0.19"
 psycopg-pool = "^3.2.6"
 psycopg = "^3.2.6"
 sqlalchemy = "^2.0.40"
-tokencost = "^0.1.26"
+llm-prices = {version = "^1.6.1", extras = ["tokencost"]}
 langchain-aws = "^0.2.21"
 langchain-fireworks = "^0.2.9"
 langchain-openai = "^0.3.33"

@@ -3476,7 +3476,12 @@ email-validator = ">=2.2.0,<3.0.0"
 httpx = ">=0.28.1,<0.29.0"
 jsonschema = ">=4.23.0,<5.0.0"
 langchain-core = ">=0.3.51,<0.4.0"
+libcst = ">=1.8.5,<2.0.0"
 pydantic = ">=2.11.3,<3.0.0"
+rel = ">=0.4.9.20,<0.5.0.0"
+streamlit = ">=1.50.0,<2.0.0"
+streamlit-code-editor = ">=0.1.22,<0.2.0"
+websocket-client = ">=1.8.0,<2.0.0"
 
 [package.source]
 type = "directory"
@@ -4004,6 +4009,24 @@ doc = ["myst-parser", "sphinx", "sphinx-book-theme"]
 test = ["coverage", "pytest", "pytest-cov"]
 
 [[package]]
+name = "llm-prices"
+version = "1.6.1"
+description = "Dated, source-cited LLM API prices (Anthropic, OpenAI, Gemini, DeepSeek, Mistral, xAI, Groq, Together, Fireworks, Cohere, Amazon Bedrock, OpenRouter, Perplexity) per 1M tokens, with provider-aware model-id lookup and exact decimal costs. Zero dependencies."
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "llm_prices-1.6.1-py3-none-any.whl", hash = "sha256:d0f4a1142146654f8630369fa7ccdc3a14d28b4cbca1a974f5060f2dc1d40ad5"},
+    {file = "llm_prices-1.6.1.tar.gz", hash = "sha256:453a376138f00839885c471d58bc29669a3320a8da89ddbda4abc0c15a367f71"},
+]
+
+[package.dependencies]
+tiktoken = {version = ">=0.7", optional = true, markers = "extra == \"tokencost\""}
+
+[package.extras]
+tokencost = ["tiktoken (>=0.7)"]
+
+[[package]]
 name = "lxml"
 version = "5.4.0"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
@@ -4089,8 +4112,11 @@ files = [
     {file = "lxml-5.4.0-cp36-cp36m-win_amd64.whl", hash = "sha256:7ce1a171ec325192c6a636b64c94418e71a1964f56d002cc28122fceff0b6121"},
     {file = "lxml-5.4.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:795f61bcaf8770e1b37eec24edf9771b307df3af74d1d6f27d812e15a9ff3872"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_12_i686.manylinux2010_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:29f451a4b614a7b5b6c2e043d7b64a15bd8304d7e767055e8ab68387a8cacf4e"},
+    {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:891f7f991a68d20c75cb13c5c9142b2a3f9eb161f1f12a9489c82172d1f133c0"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4aa412a82e460571fad592d0f93ce9935a20090029ba08eca05c614f99b0cc92"},
+    {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_28_aarch64.whl", hash = "sha256:ac7ba71f9561cd7d7b55e1ea5511543c0282e2b6450f122672a2694621d63b7e"},
     {file = "lxml-5.4.0-cp37-cp37m-manylinux_2_28_x86_64.whl", hash = "sha256:c5d32f5284012deaccd37da1e2cd42f081feaa76981f0eaa474351b68df813c5"},
+    {file = "lxml-5.4.0-cp37-cp37m-musllinux_1_2_aarch64.whl", hash = "sha256:ce31158630a6ac85bddd6b830cffd46085ff90498b397bd0a259f59d27a12188"},
     {file = "lxml-5.4.0-cp37-cp37m-musllinux_1_2_x86_64.whl", hash = "sha256:31e63621e073e04697c1b2d23fcb89991790eef370ec37ce4d5d469f40924ed6"},
     {file = "lxml-5.4.0-cp37-cp37m-win32.whl", hash = "sha256:be2ba4c3c5b7900246a8f866580700ef0d538f2ca32535e991027bdaba944063"},
     {file = "lxml-5.4.0-cp37-cp37m-win_amd64.whl", hash = "sha256:09846782b1ef650b321484ad429217f5154da4d6e786636c38e434fa32e94e49"},
@@ -7156,6 +7182,17 @@ files = [
 ]
 
 [[package]]
+name = "rel"
+version = "0.4.9.27"
+description = "Registered Event Listener. Provides standard (pyevent) interface and functionality without external dependencies"
+optional = false
+python-versions = "*"
+groups = ["dev"]
+files = [
+    {file = "rel-0.4.9.27-py3-none-any.whl", hash = "sha256:9e9835d3a8ab9b3db55af3264fbc6cf7aac10cdadde6ad8c7e290902738a5261"},
+]
+
+[[package]]
 name = "requests"
 version = "2.32.3"
 description = "Python HTTP for Humans."
@@ -8448,26 +8485,6 @@ release = ["build", "twine"]
 testing = ["mypy", "pytest", "pytest-gitignore", "pytest-mock", "responses", "ruff", "syrupy", "tox", "tox-uv", "types-filelock", "types-requests"]
 
 [[package]]
-name = "tokencost"
-version = "0.1.26"
-description = "To calculate token and translated USD cost of string and message calls to OpenAI, for example when used by AI agents"
-optional = false
-python-versions = ">=3.10"
-groups = ["main"]
-files = [
-    {file = "tokencost-0.1.26-py3-none-any.whl", hash = "sha256:f84803c4cc1449447d5f85a0d7269e660e10102e92e8c259763398702151d69e"},
-    {file = "tokencost-0.1.26.tar.gz", hash = "sha256:a16592a7a701cc021009c4d6fcb1eb7b2c8d6cd7befd50775ae65e2609a25070"},
-]
-
-[package.dependencies]
-aiohttp = ">=3.9.3"
-anthropic = ">=0.34.0"
-tiktoken = ">=0.9.0"
-
-[package.extras]
-dev = ["coverage[toml] (>=7.4.0)", "flake8 (>=3.1.0)", "pandas (>=2.1.0)", "pytest (>=7.4.4)", "python-dotenv (>=1.0.0)", "tabulate (>=0.9.0)", "tach (>=0.6.9)"]
-
-[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -8984,6 +9001,23 @@ files = [
     {file = "webcolors-24.11.1-py3-none-any.whl", hash = "sha256:515291393b4cdf0eb19c155749a096f779f7d909f7cceea072791cb9095b92e9"},
     {file = "webcolors-24.11.1.tar.gz", hash = "sha256:ecb3d768f32202af770477b8b65f318fa4f566c22948673a977b00d589dd80f6"},
 ]
+
+[[package]]
+name = "websocket-client"
+version = "1.9.2"
+description = "WebSocket client for Python with low level API options"
+optional = false
+python-versions = ">=3.10"
+groups = ["dev"]
+files = [
+    {file = "websocket_client-1.9.2-py3-none-any.whl", hash = "sha256:e1a673830a9c7bfa47b1cd3d5e4178f4c9651d80a4eab02c9c23a1c3ec6250ce"},
+    {file = "websocket_client-1.9.2.tar.gz", hash = "sha256:0fcb57545848be86992e128218fd96dd87a6769ffdb1a968dff79632b85604d0"},
+]
+
+[package.extras]
+docs = ["Sphinx (>=6.0)", "myst-parser (>=2.0.0)", "sphinx_rtd_theme (>=1.1.0)"]
+optional = ["python-socks", "wsaccel"]
+test = ["pytest", "websockets"]
 
 [[package]]
 name = "websockets"
@@ -9721,4 +9755,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "0bccb282825026d47c57407fe66d4752b2786df189d2b97397f70ccbbb6471ec"
+content-hash = "8e44dd509c668c5b0505551d93e587f697893181153c7a881a639544543ad12e"

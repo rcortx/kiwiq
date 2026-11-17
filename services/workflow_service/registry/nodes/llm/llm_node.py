@@ -3120,7 +3120,7 @@ class LLMNode(BaseNode[LLMNodeInputSchema, LLMNodeOutputSchema, LLMNodeConfigSch
         input_tokens = None
 
         # Add tokencost imports
-        from tokencost import calculate_prompt_cost, calculate_cost_by_tokens
+        from llm_prices.compat.tokencost import calculate_prompt_cost, calculate_cost_by_tokens
         try:
 
             # Deep research models have a higher cost for single research report!
@@ -3248,7 +3248,7 @@ class LLMNode(BaseNode[LLMNodeInputSchema, LLMNodeOutputSchema, LLMNodeConfigSch
             float: Actual cost in USD
         """
         # Add tokencost imports
-        from tokencost import calculate_cost_by_tokens
+        from llm_prices.compat.tokencost import calculate_cost_by_tokens
         try:
             # Map model to tokencost format
             tokencost_model = self.map_model_to_tokencost_format(provider, model_name)
