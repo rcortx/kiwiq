@@ -46,7 +46,7 @@ def calculate_compaction_llm_cost(
         This returns the pre-markup cost. The billing layer applies
         settings.LLM_TOKEN_COST_MARKUP_FACTOR before charging credits.
     """
-    from tokencost import calculate_cost_by_tokens
+    from llm_prices.compat.tokencost import calculate_cost_by_tokens
     
     # Extract token counts from usage metadata
     input_tokens = token_usage.get("input_tokens", 0)
